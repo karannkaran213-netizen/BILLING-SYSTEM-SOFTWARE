@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Restaurant Billing System</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    {% include 'admin/navbar.html' %}
+    
+    <div class="container">
+        <h1 class="page-title">Dashboard</h1>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Today's Sales</h3>
+                <p class="stat-value">₹{{ today_sales|floatformat:2 }}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Today's Orders</h3>
+                <p class="stat-value">{{ today_total_orders }}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Menu Items</h3>
+                <p class="stat-value">{{ total_menu_items }}</p>
+                <small>Available: {{ available_items }}</small>
+            </div>
+        </div>
+        
+        <div class="quick-actions">
+            <a href="{% url 'menu_list' %}" class="btn btn-primary">Manage Menu</a>
+            <a href="{% url 'reports_dashboard' %}" class="btn btn-secondary">View Reports</a>
+            <a href="{% url 'expense_list' %}" class="btn">Manage Expenses</a>
+        </div>
+    </div>
+    
+    <script src="{% static 'js/admin.js' %}"></script>
+</body>
+</html>
+

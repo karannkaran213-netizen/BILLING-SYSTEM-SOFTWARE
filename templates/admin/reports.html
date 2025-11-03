@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Restaurant Billing System</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    {% include 'admin/navbar.html' %}
+    
+    <div class="container">
+        <h1 class="page-title">Reports Dashboard</h1>
+        
+        <div class="reports-section">
+            <div class="report-card">
+                <h2>Daily Sales Report</h2>
+                <p><strong>Date:</strong> {{ daily_sales.date }}</p>
+                <p><strong>Total Sales:</strong> ₹{{ daily_sales.total_sales|floatformat:2 }}</p>
+                <p><strong>Total Orders:</strong> {{ daily_sales.total_orders }}</p>
+                <div class="report-actions">
+                    <a href="{% url 'export_daily_pdf' daily_sales.date.year daily_sales.date.month daily_sales.date.day %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                    <a href="{% url 'export_daily_excel' daily_sales.date.year daily_sales.date.month daily_sales.date.day %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                </div>
+            </div>
+            
+            <div class="report-card">
+                <h2>Monthly Sales Report</h2>
+                <p><strong>Month:</strong> {{ monthly_sales.month }}/{{ monthly_sales.year }}</p>
+                <p><strong>Total Sales:</strong> ₹{{ monthly_sales.total_sales|floatformat:2 }}</p>
+                <p><strong>Total Orders:</strong> {{ monthly_sales.total_orders }}</p>
+                <div class="report-actions">
+                    <a href="{% url 'export_monthly_pdf' monthly_sales.year monthly_sales.month %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                    <a href="{% url 'export_monthly_excel' monthly_sales.year monthly_sales.month %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                </div>
+            </div>
+            
+            <div class="report-card">
+                <h2>Expenses Report</h2>
+                <p><strong>Period:</strong> {{ expenses.start_date }} to {{ expenses.end_date }}</p>
+                <p><strong>Total Expenses:</strong> ₹{{ expenses.total_expenses|floatformat:2 }}</p>
+                <div class="report-actions">
+                    <a href="{% url 'export_expenses_pdf' expenses.start_date expenses.end_date %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                    <a href="{% url 'export_expenses_excel' expenses.start_date expenses.end_date %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                </div>
+            </div>
+            
+            <div class="report-card report-card-highlight">
+                <h2>Profit Report</h2>
+                <p><strong>Period:</strong> {{ expenses.start_date }} to {{ expenses.end_date }}</p>
+                <p><strong>Total Sales:</strong> ₹{{ monthly_sales.total_sales|floatformat:2 }}</p>
+                <p><strong>Total Expenses:</strong> ₹{{ expenses.total_expenses|floatformat:2 }}</p>
+                <p class="profit-amount"><strong>Profit:</strong> ₹{{ profit|floatformat:2 }}</p>
+                <div class="report-actions">
+                    <a href="{% url 'export_profit_pdf' expenses.start_date expenses.end_date %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                    <a href="{% url 'export_profit_excel' expenses.start_date expenses.end_date %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{% static 'js/admin.js' %}"></script>
+</body>
+</html>
+

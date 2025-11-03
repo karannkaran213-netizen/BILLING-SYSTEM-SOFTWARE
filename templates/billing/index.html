@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Billing System</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body class="billing-body">
+    <div class="billing-container">
+        <header class="billing-header">
+            <h1>Restaurant Billing System</h1>
+            <a href="{% url 'admin_dashboard' %}" class="admin-link">Admin</a>
+            <div class="cart-icon-container">
+                <button class="cart-toggle" onclick="toggleCart()">
+                    <span class="cart-icon">🛒</span>
+                </button>
+                <span class="cart-count" id="cartCount">0</span>
+            </div>
+        </header>
+        
+        <div class="billing-main">
+            <div class="menu-section">
+                <h2>Menu</h2>
+                <div class="menu-grid" id="menuGrid">
+                    {% for item in menu_items %}
+                    <div class="menu-item-card" data-item-id="{{ item.id }}">
+                        <div class="menu-item-info">
+                            <h3>{{ item.name }}</h3>
+                            <p class="menu-item-description">{{ item.description|default:"Delicious item" }}</p>
+                            <p class="menu-item-price">₹{{ item.price }}</p>
+                        </div>
+                        <button class="btn btn-primary btn-add-to-cart" onclick="addToCart({{ item.id }}, '{{ item.name }}', {{ item.price }})">
+                            Add to Cart
+                        </button>
+                    </div>
+                    {% empty %}
+                    <div class="empty-state">
+                        <p>No menu items available at the moment.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="cart-section" id="cartSection">
+                <div class="cart-header">
+                    <h2>Cart</h2>
+                    <button class="btn btn-sm btn-secondary" onclick="clearCart()">Clear Cart</button>
+                </div>
+                <div class="cart-items" id="cartItems">
+                    <p class="empty-cart">Cart is empty</p>
+                </div>
+                <div class="cart-footer">
+                    <div class="cart-total">
+                        <strong>Total: ₹<span id="cartTotal">0.00</span></strong>
+                    </div>
+                    <button class="btn btn-success btn-block" id="createOrderBtn" onclick="createOrder()" disabled>Create Order</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    
+    <script src="{% static 'js/billing.js' %}"></script>
+</body>
+</html>
+

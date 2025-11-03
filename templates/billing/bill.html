@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bill - Order {{ order.order_number }}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body class="bill-body">
+    <div class="bill-container">
+        <div class="bill-content" id="billContent">
+            <div class="bill-header">
+                <h1>Restaurant Bill</h1>
+                <p class="bill-order-number">Order #{{ order.order_number }}</p>
+                <p class="bill-date">{{ order.created_at|date:"F d, Y h:i A" }}</p>
+            </div>
+            
+            <div class="bill-items">
+                <table class="bill-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Price (₹)</th>
+                            <th>Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in order.order_items.all %}
+                        <tr>
+                            <td>{{ item.menu_item.name }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>₹{{ item.price }}</td>
+                            <td>₹{{ item.subtotal|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="bill-total-row">
+                            <td colspan="3"><strong>Total</strong></td>
+                            <td><strong>₹{{ order.total_amount|floatformat:2 }}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <div class="bill-status">
+                <p><strong>Status:</strong> <span class="badge {% if order.status == 'paid' %}badge-success{% else %}badge-warning{% endif %}">{{ order.status|upper }}</span></p>
+            </div>
+            
+            <div class="bill-qr">
+                <h3>QR Code</h3>
+                <img src="{% url 'generate_qr' order.id %}" alt="QR Code" class="qr-image">
+                <p class="qr-note">Scan to view order details</p>
+            </div>
+        </div>
+        
+        <div class="bill-actions">
+            {% if order.status != 'paid' %}
+            <button class="btn btn-success btn-lg" onclick="payNow({{ order.id }})">Pay Now</button>
+            {% endif %}
+            <button class="btn btn-primary btn-lg" onclick="printBill()">Print Bill</button>
+            <a href="{% url 'billing_index' %}" class="btn btn-secondary btn-lg">New Order</a>
+        </div>
+    </div>
+    
+    <script src="{% static 'js/billing.js' %}"></script>
+</body>
+</html>
+

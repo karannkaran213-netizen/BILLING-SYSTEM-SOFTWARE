@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Expense - Admin</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/expenses.css' %}">
+</head>
+<body>
+    {% include 'admin/navbar.html' %}
+
+    <div class="container">
+        <h1 class="page-title">Delete Expense</h1>
+        <p>Are you sure you want to delete this expense?</p>
+        <ul>
+            <li><strong>Date:</strong> {{ expense.date }}</li>
+            <li><strong>Description:</strong> {{ expense.description }}</li>
+            <li><strong>Category:</strong> {{ expense.get_category_display }}</li>
+            <li><strong>Amount:</strong> ₹{{ expense.amount|floatformat:2 }}</li>
+        </ul>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Delete</button>
+            <a href="{% url 'expense_list' %}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+
+    <script src="{% static 'js/expenses.js' %}"></script>
+    <script src="{% static 'js/admin.js' %}"></script>
+</body>
+</html>
+
+

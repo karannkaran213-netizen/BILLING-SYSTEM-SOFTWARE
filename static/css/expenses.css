@@ -1,0 +1,4 @@
+.expenses-total { font-weight: 600; }
+.expenses-actions { display: flex; gap: 8px; }
+.expenses-filter { display: flex; gap: 12px; align-items: end; margin: 12px 0; }
+
