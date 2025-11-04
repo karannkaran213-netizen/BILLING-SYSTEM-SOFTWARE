@@ -13,6 +13,12 @@
     <div class="container">
         <h1 class="page-title">Dashboard</h1>
         
+        {% if is_new_user %}
+        <div class="alert alert-success" style="margin-bottom: 20px;">
+            <strong>Welcome!</strong> Your account was created today. You'll see your data here as you start adding menu items, orders, and expenses.
+        </div>
+        {% endif %}
+        
         <div class="stats-grid">
             <div class="stat-card">
                 <h3>Today's Sales</h3>

@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login, authenticate
+from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
@@ -48,24 +48,48 @@ def admin_login(request):
 
 
 @login_required
+def admin_logout(request):
+    """Admin logout - redirects to login page"""
+    logout(request)
+    messages.success(request, 'You have been logged out successfully.')
+    return redirect('admin_login')
+
+
+@login_required
 def admin_dashboard(request):
-    """Admin dashboard"""
+    """Admin dashboard - shows only data created after user account creation"""
     today = timezone.now().date()
+    user_created_date = request.user.date_joined.date()
     
-    # Today's statistics
-    today_orders = Order.objects.filter(created_at__date=today)
+    # Filter data created on or after user account creation date
+    # This ensures new superusers only see their own data, not old data
+    filter_date = max(user_created_date, today)
+    
+    # Today's statistics (only orders created after user account)
+    today_orders = Order.objects.filter(
+        created_at__date=today,
+        created_at__gte=request.user.date_joined
+    )
     today_sales = sum(order.total_amount for order in today_orders.filter(status='paid'))
     today_total_orders = today_orders.count()
     
-    # Total menu items
-    total_menu_items = Menu.objects.count()
-    available_items = Menu.objects.filter(is_available=True).count()
+    # Total menu items (only items created after user account)
+    total_menu_items = Menu.objects.filter(created_at__gte=request.user.date_joined).count()
+    available_items = Menu.objects.filter(
+        is_available=True,
+        created_at__gte=request.user.date_joined
+    ).count()
+    
+    # Check if user is new (created today)
+    is_new_user = user_created_date == today
     
     context = {
         'today_sales': today_sales,
         'today_total_orders': today_total_orders,
         'total_menu_items': total_menu_items,
         'available_items': available_items,
+        'is_new_user': is_new_user,
+        'user_created_date': user_created_date,
     }
     
     return render(request, 'admin/dashboard.html', context)
@@ -74,8 +98,8 @@ def admin_dashboard(request):
 # Menu Management Views
 @login_required
 def menu_list(request):
-    """List all menu items"""
-    menu_items = Menu.objects.all()
+    """List all menu items - only shows items created after user account"""
+    menu_items = Menu.objects.filter(created_at__gte=request.user.date_joined)
     return render(request, 'admin/menu_list.html', {'menu_items': menu_items})
 
 
@@ -139,20 +163,21 @@ def menu_toggle_availability(request, pk):
 # Reports Views
 @login_required
 def reports_dashboard(request):
-    """Reports dashboard"""
+    """Reports dashboard - shows only data created after user account"""
     today = timezone.now().date()
     current_month = timezone.now().month
     current_year = timezone.now().year
+    user_date_joined = request.user.date_joined
     
-    # Daily sales
-    daily_sales = calculate_daily_sales(today)
+    # Daily sales (filtered by user)
+    daily_sales = calculate_daily_sales(today, user_date_joined)
     
-    # Monthly sales
-    monthly_sales = calculate_monthly_sales(current_year, current_month)
+    # Monthly sales (filtered by user)
+    monthly_sales = calculate_monthly_sales(current_year, current_month, user_date_joined)
     
-    # Current month expenses
+    # Current month expenses (filtered by user)
     month_start = datetime(current_year, current_month, 1).date()
-    month_expenses = calculate_expenses(month_start, today)
+    month_expenses = calculate_expenses(month_start, today, user_date_joined)
     
     # Profit calculation
     profit = calculate_profit(monthly_sales['total_sales'], month_expenses['total_expenses'])
@@ -173,8 +198,8 @@ def reports_dashboard(request):
 # Expenses Management Views
 @login_required
 def expense_list(request):
-    """List and filter expenses"""
-    expenses = Expense.objects.all()
+    """List and filter expenses - only shows expenses created after user account"""
+    expenses = Expense.objects.filter(created_at__gte=request.user.date_joined)
     return render(request, 'admin/expense_list.html', {'expenses': expenses})
 
 
@@ -414,7 +439,7 @@ def export_daily_pdf(request, year, month, day):
     """Export daily sales report as PDF"""
     from datetime import date
     report_date = date(int(year), int(month), int(day))
-    daily_sales = calculate_daily_sales(report_date)
+    daily_sales = calculate_daily_sales(report_date, request.user.date_joined)
     
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="daily_sales_{report_date}.pdf"'
@@ -482,7 +507,7 @@ def export_daily_pdf(request, year, month, day):
 def export_daily_excel(request, year, month, day):
     """Export daily sales report as Excel"""
     report_date = date(int(year), int(month), int(day))
-    daily_sales = calculate_daily_sales(report_date)
+    daily_sales = calculate_daily_sales(report_date, request.user.date_joined)
     
     wb = Workbook()
     ws = wb.active
@@ -523,7 +548,7 @@ def export_daily_excel(request, year, month, day):
 @login_required
 def export_monthly_pdf(request, year, month):
     """Export monthly sales report as PDF"""
-    monthly_sales = calculate_monthly_sales(int(year), int(month))
+    monthly_sales = calculate_monthly_sales(int(year), int(month), request.user.date_joined)
     
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="monthly_sales_{year}_{month}.pdf"'
@@ -564,7 +589,7 @@ def export_monthly_pdf(request, year, month):
 @login_required
 def export_monthly_excel(request, year, month):
     """Export monthly sales report as Excel"""
-    monthly_sales = calculate_monthly_sales(int(year), int(month))
+    monthly_sales = calculate_monthly_sales(int(year), int(month), request.user.date_joined)
     
     wb = Workbook()
     ws = wb.active
@@ -592,7 +617,7 @@ def export_monthly_excel(request, year, month):
 @login_required
 def export_expenses_pdf(request, start_date, end_date):
     """Export expenses report as PDF"""
-    expenses_data = calculate_expenses(start_date, end_date)
+    expenses_data = calculate_expenses(start_date, end_date, request.user.date_joined)
     
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="expenses_{start_date}_{end_date}.pdf"'
@@ -658,7 +683,7 @@ def export_expenses_pdf(request, start_date, end_date):
 @login_required
 def export_expenses_excel(request, start_date, end_date):
     """Export expenses report as Excel"""
-    expenses_data = calculate_expenses(start_date, end_date)
+    expenses_data = calculate_expenses(start_date, end_date, request.user.date_joined)
     
     wb = Workbook()
     ws = wb.active
@@ -697,8 +722,8 @@ def export_expenses_excel(request, start_date, end_date):
 @login_required
 def export_profit_pdf(request, start_date, end_date):
     """Export profit report as PDF"""
-    monthly_sales = calculate_monthly_sales(timezone.now().year, timezone.now().month)
-    expenses_data = calculate_expenses(start_date, end_date)
+    monthly_sales = calculate_monthly_sales(timezone.now().year, timezone.now().month, request.user.date_joined)
+    expenses_data = calculate_expenses(start_date, end_date, request.user.date_joined)
     profit = calculate_profit(monthly_sales['total_sales'], expenses_data['total_expenses'])
     
     response = HttpResponse(content_type='application/pdf')
@@ -742,8 +767,8 @@ def export_profit_pdf(request, start_date, end_date):
 @login_required
 def export_profit_excel(request, start_date, end_date):
     """Export profit report as Excel"""
-    monthly_sales = calculate_monthly_sales(timezone.now().year, timezone.now().month)
-    expenses_data = calculate_expenses(start_date, end_date)
+    monthly_sales = calculate_monthly_sales(timezone.now().year, timezone.now().month, request.user.date_joined)
+    expenses_data = calculate_expenses(start_date, end_date, request.user.date_joined)
     profit = calculate_profit(monthly_sales['total_sales'], expenses_data['total_expenses'])
     
     wb = Workbook()

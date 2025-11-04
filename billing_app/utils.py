@@ -45,13 +45,16 @@ def generate_qr_code_response(order):
     return response
 
 
-def calculate_daily_sales(date):
+def calculate_daily_sales(date, user_date_joined=None):
     """Calculate sales for a specific date"""
     from .models import Order
     orders = Order.objects.filter(
         created_at__date=date,
         status='paid'
     )
+    # Filter by user creation date if provided
+    if user_date_joined:
+        orders = orders.filter(created_at__gte=user_date_joined)
     total_sales = sum(order.total_amount for order in orders)
     total_orders = orders.count()
     return {
@@ -62,7 +65,7 @@ def calculate_daily_sales(date):
     }
 
 
-def calculate_monthly_sales(year, month):
+def calculate_monthly_sales(year, month, user_date_joined=None):
     """Calculate sales for a specific month"""
     from .models import Order
     orders = Order.objects.filter(
@@ -70,6 +73,9 @@ def calculate_monthly_sales(year, month):
         created_at__month=month,
         status='paid'
     )
+    # Filter by user creation date if provided
+    if user_date_joined:
+        orders = orders.filter(created_at__gte=user_date_joined)
     total_sales = sum(order.total_amount for order in orders)
     total_orders = orders.count()
     return {
@@ -81,10 +87,13 @@ def calculate_monthly_sales(year, month):
     }
 
 
-def calculate_expenses(start_date, end_date):
+def calculate_expenses(start_date, end_date, user_date_joined=None):
     """Calculate expenses between two dates"""
     from .models import Expense
     expenses = Expense.objects.filter(date__range=[start_date, end_date])
+    # Filter by user creation date if provided
+    if user_date_joined:
+        expenses = expenses.filter(created_at__gte=user_date_joined)
     total_expenses = sum(expense.amount for expense in expenses)
     return {
         'start_date': start_date,

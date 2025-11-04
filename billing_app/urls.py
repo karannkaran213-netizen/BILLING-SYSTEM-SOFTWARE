@@ -1,11 +1,10 @@
 from django.urls import path
-from django.contrib.auth import views as auth_views
 from . import views
 
 urlpatterns = [
     # Admin Authentication
-    path('login/', views.admin_login, name='admin_login'),
-    path('logout/', auth_views.LogoutView.as_view(), name='admin_logout'),
+    path('', views.admin_login, name='admin_login'),
+    path('logout/', views.admin_logout, name='admin_logout'),
     
     # Admin Dashboard
     path('dashboard/', views.admin_dashboard, name='admin_dashboard'),

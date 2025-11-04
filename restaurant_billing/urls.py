@@ -7,7 +7,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
-    path('admin/', include('billing_app.urls')),
+    path('', include('billing_app.urls')),
     path('billing/', include('billing_app.billing_urls')),
 ]
 
