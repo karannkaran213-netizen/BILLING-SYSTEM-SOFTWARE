@@ -70,18 +70,16 @@ WSGI_APPLICATION = 'restaurant_billing.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+import os
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'restaurant_billing',
-        'USER': 'root',
-        'PASSWORD': '123456',
-        'HOST': 'localhost',
-        'PORT': 3306,
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-            'charset': 'utf8mb4',
-        },
+        'NAME': os.getenv('restaurant_billing'),
+        'USER': os.getenv('root'),
+        'PASSWORD': os.getenv('123456'),
+        'HOST': os.getenv('.vercel.app'),
+        'PORT': os.getenv('3306'),
     }
 }
 
