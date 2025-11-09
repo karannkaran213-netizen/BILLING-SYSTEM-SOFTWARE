@@ -17,5 +17,6 @@ urlpatterns = [
     path('bill/<int:order_id>/', views.view_bill, name='view_bill'),
     path('bill/<int:order_id>/pay/', views.pay_now, name='pay_now'),
     path('bill/<int:order_id>/qr/', views.generate_qr, name='generate_qr'),
+    path('bill/<int:order_id>/pdf/', views.export_bill_pdf, name='export_bill_pdf'),
 ]
 

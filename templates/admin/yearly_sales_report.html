@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yearly Sales Report - Restaurant Billing System</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    {% include 'admin/navbar.html' %}
+    
+    <div class="container">
+        <h1 class="page-title">Yearly Sales Report</h1>
+        
+        <div class="report-filters" style="margin-bottom: 20px;">
+            <form method="get" style="display: flex; gap: 10px; align-items: end;">
+                <div class="form-group" style="margin: 0;">
+                    <label for="start_date">Start Date:</label>
+                    <input type="date" id="start_date" name="start_date" class="form-control" value="{{ start_date|date:'Y-m-d' }}" style="width: auto;">
+                </div>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </form>
+        </div>
+        
+        <div class="report-card">
+            <h2>Sales Summary</h2>
+            <p><strong>Period:</strong> {{ yearly_sales.start_date }} to {{ yearly_sales.end_date }}</p>
+            <p><strong>Total Sales:</strong> ₹{{ yearly_sales.total_sales|floatformat:2 }}</p>
+            <p><strong>Total Orders:</strong> {{ yearly_sales.total_orders }}</p>
+            <div class="report-actions">
+                <a href="{% url 'export_yearly_pdf' %}?start_date={{ start_date|date:'Y-m-d' }}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                <a href="{% url 'export_yearly_excel' %}?start_date={{ start_date|date:'Y-m-d' }}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+            </div>
+        </div>
+        
+        {% if yearly_sales.item_breakdown %}
+        <div class="report-card" style="margin-top: 20px;">
+            <h2>Item-wise Breakdown</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Item Name</th>
+                        <th>Total Quantity</th>
+                        <th>Total Revenue (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in yearly_sales.item_breakdown %}
+                    <tr>
+                        <td>{{ item.name }}</td>
+                        <td>{{ item.total_quantity }}</td>
+                        <td>₹{{ item.total_revenue|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+    
+    <script src="{% static 'js/admin.js' %}"></script>
+</body>
+</html>
+
+

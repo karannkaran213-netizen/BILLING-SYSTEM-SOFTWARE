@@ -2,6 +2,7 @@ import qrcode
 from io import BytesIO
 from django.http import HttpResponse
 from django.utils import timezone
+from django.db.models import Sum
 from decimal import Decimal
 
 
@@ -106,4 +107,52 @@ def calculate_expenses(start_date, end_date, user_date_joined=None):
 def calculate_profit(sales, expenses):
     """Calculate profit (sales - expenses)"""
     return sales - expenses
+
+
+def calculate_yearly_sales(start_date, end_date, user_date_joined=None):
+    """Calculate sales for a date range (yearly report)"""
+    from .models import Order
+    orders = Order.objects.filter(
+        created_at__date__gte=start_date,
+        created_at__date__lte=end_date,
+        status='paid'
+    )
+    # Filter by user creation date if provided
+    if user_date_joined:
+        orders = orders.filter(created_at__gte=user_date_joined)
+    total_sales = sum(order.total_amount for order in orders)
+    total_orders = orders.count()
+    
+    # Get item-wise breakdown
+    from .models import OrderItem
+    order_items = OrderItem.objects.filter(
+        order__in=orders
+    ).values('menu_item__name').annotate(
+        total_quantity=Sum('quantity'),
+        total_revenue=Sum('price')
+    ).order_by('-total_quantity')
+    
+    # Calculate actual revenue (price * quantity for each item)
+    item_breakdown = []
+    for item in order_items:
+        # Get all order items for this menu item
+        items = OrderItem.objects.filter(
+            order__in=orders,
+            menu_item__name=item['menu_item__name']
+        )
+        actual_revenue = sum(order_item.price * order_item.quantity for order_item in items)
+        item_breakdown.append({
+            'name': item['menu_item__name'],
+            'total_quantity': item['total_quantity'],
+            'total_revenue': actual_revenue
+        })
+    
+    return {
+        'start_date': start_date,
+        'end_date': end_date,
+        'total_sales': total_sales,
+        'total_orders': total_orders,
+        'orders': orders,
+        'item_breakdown': item_breakdown
+    }
 

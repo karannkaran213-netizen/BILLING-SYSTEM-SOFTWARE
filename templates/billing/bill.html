@@ -6,14 +6,164 @@
     <title>Bill - Order {{ order.order_number }}</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <style>
+        @media print {
+            /* Reset for all printers and ensure single page */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                margin: 0;
+                padding: 0;
+                background: none;
+                font-family: 'Courier New', monospace;
+                line-height: 1.2;
+                font-size: 10pt;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
+            .bill-container {
+                width: 100%;
+                margin: 0;
+                padding: 4mm;
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+
+            /* Force QR code and screen elements to be hidden */
+            #qrCodeSection,
+            .screen-only,
+            .no-print {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                position: absolute !important;
+                left: -9999px !important;
+            }
+
+            .bill-content {
+                padding: 0;
+                box-shadow: none;
+            }
+
+            /* Hide screen-only elements */
+            .screen-only {
+                display: none !important;
+            }
+
+            /* Show print-only elements */
+            .print-header,
+            .print-footer {
+                display: block !important;
+            }
+
+            /* Thermal printer specific (58mm) */
+            @page {
+                size: 58mm auto;
+                margin: 0;
+                orphans: 4;
+                widows: 4;
+            }
+
+            /* Thermal printer (80mm) */
+            @media (min-width: 80mm) {
+                @page {
+                    size: 80mm auto;
+                    margin: 1mm;
+                }
+                body { 
+                    font-size: 11pt;
+                    max-height: 100%;
+                }
+                .bill-table td,
+                .bill-table th {
+                    padding: 0.5mm;
+                }
+            }
+
+            /* Regular paper */
+            @media (min-width: 210mm) {
+                @page {
+                    size: A4 portrait;
+                    margin: 10mm;
+                }
+                body { 
+                    font-size: 12pt;
+                    max-height: 297mm; /* A4 height */
+                }
+            }
+
+            /* Header styles */
+            .bill-header {
+                text-align: center;
+                margin-bottom: 3mm;
+                border-bottom: 1px dashed #000;
+                padding-bottom: 2mm;
+            }
+
+            .bill-header h1 {
+                font-size: 14pt;
+                margin-bottom: 2mm;
+            }
+
+            /* Table styles */
+            .bill-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 3mm 0;
+            }
+
+            .bill-table th,
+            .bill-table td {
+                padding: 1mm;
+                text-align: left;
+                border-bottom: 1px dotted #000;
+            }
+
+            .bill-table th {
+                font-weight: bold;
+                border-bottom: 1px solid #000;
+            }
+
+            .bill-total-row td {
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
+                font-weight: bold;
+            }
+
+            /* Print-specific elements */
+            .print-header,
+            .print-footer {
+                text-align: center;
+                margin: 2mm 0;
+            }
+
+            .dotted-separator {
+                border-bottom: 1px dashed #000;
+                margin: 2mm 0;
+            }
+        }
+    </style>
 </head>
 <body class="bill-body">
     <div class="bill-container">
         <div class="bill-content" id="billContent">
-            <div class="bill-header">
+            <!-- Print-only header -->
+            <div class="print-header">
                 <h1>Restaurant Bill</h1>
+                <p>{{ request.site.name|default:"Your Restaurant Name" }}</p>
+                <p>{{ request.site.address|default:"Restaurant Address" }}</p>
+                <p>Tel: {{ request.site.phone|default:"Phone Number" }}</p>
+                <div class="dotted-separator"></div>
+            </div>
+            
+            <div class="bill-header">
                 <p class="bill-order-number">Order #{{ order.order_number }}</p>
-                <p class="bill-date">{{ order.created_at|date:"F d, Y h:i A" }}</p>
+                <p class="bill-date">{{ order.created_at|date:"d/m/Y H:i" }}</p>
             </div>
             
             <div class="bill-items">
@@ -45,22 +195,32 @@
                 </table>
             </div>
             
-            <div class="bill-status">
+            <div class="bill-status screen-only">
                 <p><strong>Status:</strong> <span class="badge {% if order.status == 'paid' %}badge-success{% else %}badge-warning{% endif %}">{{ order.status|upper }}</span></p>
             </div>
             
-            <div class="bill-qr">
+            <!-- QR code only shown on screen, never in print -->
+            <div class="bill-qr screen-only" id="qrCodeSection">
                 <h3>QR Code</h3>
-                <img src="{% url 'generate_qr' order.id %}" alt="QR Code" class="qr-image">
+                <div class="qr-container">
+                    <img src="{% url 'generate_qr' order.id %}" alt="QR Code" class="qr-image" style="width: 120px; height: 120px; display: block; margin: 15px auto;">
+                </div>
                 <p class="qr-note">Scan to view order details</p>
+            </div>
+
+            <!-- Print-only footer -->
+            <div class="print-footer">
+                <p>Thank you for your business!</p>
+                <p>{{ request.site.footer_text|default:"Have a great day!" }}</p>
             </div>
         </div>
         
-        <div class="bill-actions">
+        <div class="bill-actions screen-only">
             {% if order.status != 'paid' %}
             <button class="btn btn-success btn-lg" onclick="payNow({{ order.id }})">Pay Now</button>
             {% endif %}
             <button class="btn btn-primary btn-lg" onclick="printBill()">Print Bill</button>
+            <a href="{% url 'export_bill_pdf' order.id %}" class="btn btn-danger btn-lg" target="_blank">Download PDF</a>
             <a href="{% url 'billing_index' %}" class="btn btn-secondary btn-lg">New Order</a>
         </div>
     </div>

@@ -255,29 +255,20 @@ function payNow(orderId) {
     });
 }
 
-// Print bill
+// Print bill - QR code hidden automatically via CSS
 function printBill() {
-    const billContent = document.getElementById('billContent');
-    if (billContent) {
-        const printWindow = window.open('', '', 'height=600,width=800');
-        printWindow.document.write('<html><head><title>Print Bill</title>');
-        printWindow.document.write('<style>');
-        printWindow.document.write(`
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            .bill-header { text-align: center; margin-bottom: 20px; }
-            .bill-table { width: 100%; border-collapse: collapse; }
-            .bill-table th, .bill-table td { padding: 10px; border: 1px solid #ddd; }
-            .bill-total-row { font-weight: bold; }
-            @media print { body { margin: 0; } }
-        `);
-        printWindow.document.write('</style></head><body>');
-        printWindow.document.write(billContent.innerHTML);
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        printWindow.print();
-    } else {
-        window.print();
+    // Ensure QR code is hidden before printing
+    const qrSection = document.getElementById('qrCodeSection');
+    if (qrSection) {
+        qrSection.classList.add('no-print');
     }
+    
+    // Use browser's native print function
+    // CSS @media print rules will automatically:
+    // 1. Hide QR code (.no-print, #qrCodeSection, .bill-qr)
+    // 2. Hide action buttons (.bill-actions, .btn)
+    // 3. Adapt format to printer paper size automatically
+    window.print();
 }
 
 // Show notification

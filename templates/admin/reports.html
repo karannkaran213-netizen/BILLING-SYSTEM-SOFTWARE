@@ -57,6 +57,22 @@
                     <a href="{% url 'export_profit_excel' expenses.start_date expenses.end_date %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
                 </div>
             </div>
+            
+            <div class="report-card">
+                <h2>Yearly Sales Report</h2>
+                <p><strong>Period:</strong> {{ yearly_sales.start_date }} to {{ yearly_sales.end_date }}</p>
+                <p><strong>Total Sales:</strong> ₹{{ yearly_sales.total_sales|floatformat:2 }}</p>
+                <p><strong>Total Orders:</strong> {{ yearly_sales.total_orders }}</p>
+                <div class="report-actions">
+                    <a href="{% url 'yearly_sales_report' %}" class="btn btn-sm btn-primary">View Full Report</a>
+                    <a href="{% url 'export_yearly_pdf' %}?start_date={{ yearly_sales.start_date|date:'Y-m-d' }}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                    <a href="{% url 'export_yearly_excel' %}?start_date={{ yearly_sales.start_date|date:'Y-m-d' }}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="{% url 'reports_graphs' %}" class="btn btn-primary btn-lg">View Sales Graphs</a>
         </div>
     </div>
     

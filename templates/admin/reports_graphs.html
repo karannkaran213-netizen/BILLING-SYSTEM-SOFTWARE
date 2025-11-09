@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Graphs - Restaurant Billing System</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/graphs.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    {% include 'admin/navbar.html' %}
+    
+    <div class="container">
+        <h1 class="page-title">Sales Graphs</h1>
+        
+        <div class="graphs-section">
+            <!-- Daily Sales and Items Graph -->
+            <div class="graph-card">
+                <h2>Daily Sales and Items (Last 30 Days)</h2>
+                <div class="graph-container">
+                    <canvas id="dailySalesChart"></canvas>
+                </div>
+                <div class="graph-container">
+                    <canvas id="dailyItemsChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Daily Breakdown -->
+            <div class="graph-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Daily Breakdown - Last 30 Days</h2>
+                    <div class="report-actions">
+                        <a href="{% url 'export_daily_breakdown_pdf' %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                        <a href="{% url 'export_daily_breakdown_excel' %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                    </div>
+                </div>
+                <div class="breakdown-table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Sales (₹)</th>
+                                <th>Orders</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in daily_breakdown %}
+                            <tr>
+                                <td>{{ item.date|date:"Y-m-d" }}</td>
+                                <td>₹{{ item.sales|floatformat:2 }}</td>
+                                <td>{{ item.orders }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Top Items - Last 7 Days -->
+            <div class="graph-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Top Items Breakdown - Last 7 Days</h2>
+                    <div class="report-actions">
+                        <a href="{% url 'export_top_items_7days_pdf' %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                        <a href="{% url 'export_top_items_7days_excel' %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                    </div>
+                </div>
+                <div class="breakdown-table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Item Name</th>
+                                <th>Quantity</th>
+                                <th>Revenue (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in top_items_7days %}
+                            <tr>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.quantity }}</td>
+                                <td>₹{{ item.revenue|floatformat:2 }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3">No items found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Monthly Sales and Items Graph -->
+            <div class="graph-card">
+                <h2>Monthly Sales and Items (Last 12 Months)</h2>
+                <div class="graph-container">
+                    <canvas id="monthlySalesChart"></canvas>
+                </div>
+                <div class="graph-container">
+                    <canvas id="monthlyItemsChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Monthly Breakdown -->
+            <div class="graph-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Monthly Breakdown - Last 12 Months</h2>
+                    <div class="report-actions">
+                        <a href="{% url 'export_monthly_breakdown_pdf' %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                        <a href="{% url 'export_monthly_breakdown_excel' %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                    </div>
+                </div>
+                <div class="breakdown-table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th>Sales (₹)</th>
+                                <th>Orders</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in monthly_breakdown %}
+                            <tr>
+                                <td>{{ item.month_str }}</td>
+                                <td>₹{{ item.sales|floatformat:2 }}</td>
+                                <td>{{ item.orders }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Top Items - Last 6 Months -->
+            <div class="graph-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Top Items Breakdown - Last 6 Months</h2>
+                    <div class="report-actions">
+                        <a href="{% url 'export_top_items_6months_pdf' %}" class="btn btn-sm btn-danger" target="_blank">Export PDF</a>
+                        <a href="{% url 'export_top_items_6months_excel' %}" class="btn btn-sm btn-success" target="_blank">Export Excel</a>
+                    </div>
+                </div>
+                <div class="breakdown-table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Item Name</th>
+                                <th>Quantity</th>
+                                <th>Revenue (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in top_items_6months %}
+                            <tr>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.quantity }}</td>
+                                <td>₹{{ item.revenue|floatformat:2 }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3">No items found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Daily Sales Data
+        const dailyData = {{ daily_data }};
+        const dailyItemsData = {{ daily_items_data }};
+        
+        // Monthly Sales Data
+        const monthlyData = {{ monthly_data }};
+        const monthlyItemsData = {{ monthly_items_data }};
+        
+        // Daily Sales Chart
+        const dailySalesCtx = document.getElementById('dailySalesChart').getContext('2d');
+        new Chart(dailySalesCtx, {
+            type: 'line',
+            data: {
+                labels: dailyData.map(d => d.date),
+                datasets: [{
+                    label: 'Daily Sales (₹)',
+                    data: dailyData.map(d => d.sales),
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1,
+                    fill: true
+                }, {
+                    label: 'Number of Orders',
+                    data: dailyData.map(d => d.orders),
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    tension: 0.1,
+                    yAxisID: 'y1',
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Daily Sales and Orders'
+                    },
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Sales (₹)'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Number of Orders'
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Daily Items Chart
+        const dailyItemsCtx = document.getElementById('dailyItemsChart').getContext('2d');
+        const dailyItemNames = Object.keys(dailyItemsData);
+        const dailyItemDatasets = dailyItemNames.map((itemName, index) => {
+            const colors = [
+                'rgb(255, 99, 132)',
+                'rgb(54, 162, 235)',
+                'rgb(255, 205, 86)',
+                'rgb(75, 192, 192)',
+                'rgb(153, 102, 255)',
+                'rgb(255, 159, 64)',
+                'rgb(201, 203, 207)',
+                'rgb(255, 99, 255)',
+                'rgb(99, 255, 132)',
+                'rgb(255, 132, 99)'
+            ];
+            return {
+                label: itemName,
+                data: dailyData.map(d => dailyItemsData[itemName][d.date] || 0),
+                borderColor: colors[index % colors.length],
+                backgroundColor: colors[index % colors.length].replace('rgb', 'rgba').replace(')', ', 0.2)'),
+                tension: 0.1,
+                fill: false
+            };
+        });
+        
+        new Chart(dailyItemsCtx, {
+            type: 'line',
+            data: {
+                labels: dailyData.map(d => d.date),
+                datasets: dailyItemDatasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Daily Items Sold (Last 30 Days)'
+                    },
+                    legend: {
+                        display: true,
+                        position: 'right'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Quantity'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Monthly Sales Chart
+        const monthlySalesCtx = document.getElementById('monthlySalesChart').getContext('2d');
+        new Chart(monthlySalesCtx, {
+            type: 'bar',
+            data: {
+                labels: monthlyData.map(d => d.month),
+                datasets: [{
+                    label: 'Monthly Sales (₹)',
+                    data: monthlyData.map(d => d.sales),
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgb(54, 162, 235)',
+                    borderWidth: 1
+                }, {
+                    label: 'Number of Orders',
+                    data: monthlyData.map(d => d.orders),
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    borderColor: 'rgb(255, 99, 132)',
+                    borderWidth: 1,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Monthly Sales and Orders'
+                    },
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Sales (₹)'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Orders'
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Monthly Items Chart
+        const monthlyItemsCtx = document.getElementById('monthlyItemsChart').getContext('2d');
+        const monthlyItemNames = Object.keys(monthlyItemsData);
+        const monthlyItemDatasets = monthlyItemNames.map((itemName, index) => {
+            const colors = [
+                'rgb(255, 99, 132)',
+                'rgb(54, 162, 235)',
+                'rgb(255, 205, 86)',
+                'rgb(75, 192, 192)',
+                'rgb(153, 102, 255)',
+                'rgb(255, 159, 64)',
+                'rgb(201, 203, 207)',
+                'rgb(255, 99, 255)',
+                'rgb(99, 255, 132)',
+                'rgb(255, 132, 99)'
+            ];
+            return {
+                label: itemName,
+                data: monthlyData.map(d => monthlyItemsData[itemName][d.month] || 0),
+                backgroundColor: colors[index % colors.length].replace('rgb', 'rgba').replace(')', ', 0.6)'),
+                borderColor: colors[index % colors.length],
+                borderWidth: 1
+            };
+        });
+        
+        new Chart(monthlyItemsCtx, {
+            type: 'bar',
+            data: {
+                labels: monthlyData.map(d => d.month),
+                datasets: monthlyItemDatasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Monthly Items Sold (Last 12 Months)'
+                    },
+                    legend: {
+                        display: true,
+                        position: 'right'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        stacked: false,
+                        title: {
+                            display: true,
+                            text: 'Quantity'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+    
+    <script src="{% static 'js/admin.js' %}"></script>
+</body>
+</html>
+

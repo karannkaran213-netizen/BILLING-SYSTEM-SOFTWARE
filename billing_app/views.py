@@ -23,7 +23,8 @@ from .utils import (
     calculate_daily_sales,
     calculate_monthly_sales,
     calculate_expenses,
-    calculate_profit
+    calculate_profit,
+    calculate_yearly_sales
 )
 
 
@@ -182,11 +183,16 @@ def reports_dashboard(request):
     # Profit calculation
     profit = calculate_profit(monthly_sales['total_sales'], month_expenses['total_expenses'])
     
+    # Yearly sales (from user creation date to today)
+    yearly_start_date = max(user_date_joined.date(), date(current_year, 1, 1))
+    yearly_sales = calculate_yearly_sales(yearly_start_date, today, user_date_joined)
+    
     context = {
         'daily_sales': daily_sales,
         'monthly_sales': monthly_sales,
         'expenses': month_expenses,
         'profit': profit,
+        'yearly_sales': yearly_sales,
         'today': today,
         'current_month': current_month,
         'current_year': current_year,
@@ -431,6 +437,113 @@ def generate_qr(request, order_id):
     """Generate QR code for an order"""
     order = get_object_or_404(Order, pk=order_id)
     return generate_qr_code_response(order)
+
+
+def export_bill_pdf(request, order_id):
+    """Export bill as PDF - same format as print (NO QR CODE)"""
+    order = get_object_or_404(Order, pk=order_id)
+    
+    response = HttpResponse(content_type='application/pdf')
+    # Use bill1.pdf as filename if it's the first bill, otherwise use order number
+    response['Content-Disposition'] = f'attachment; filename="bill1.pdf"'
+    
+    # Use letter size but can adapt to any size
+    doc = SimpleDocTemplate(response, pagesize=letter, 
+                           leftMargin=0.5*inch, rightMargin=0.5*inch,
+                           topMargin=0.5*inch, bottomMargin=0.5*inch)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Header
+    header_style = styles['Heading1']
+    header_style.alignment = 1  # Center alignment
+    header_style.fontSize = 20
+    header = Paragraph("Restaurant Bill", header_style)
+    elements.append(header)
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Order Number
+    order_num_style = styles['Normal']
+    order_num_style.alignment = 1
+    order_num_style.fontSize = 14
+    order_num = Paragraph(f"Order #: {order.order_number}", order_num_style)
+    elements.append(order_num)
+    elements.append(Spacer(1, 0.1*inch))
+    
+    # Date
+    date_style = styles['Normal']
+    date_style.alignment = 1
+    date_style.fontSize = 10
+    date_str = order.created_at.strftime('%B %d, %Y %I:%M %p')
+    date_para = Paragraph(f"Date: {date_str}", date_style)
+    elements.append(date_para)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Items Table
+    table_data = [['Item', 'Qty', 'Price (₹)', 'Subtotal (₹)']]
+    
+    for item in order.order_items.all():
+        table_data.append([
+            item.menu_item.name,
+            str(item.quantity),
+            f"₹{item.price:.2f}",
+            f"₹{item.subtotal:.2f}"
+        ])
+    
+    # Total Row
+    table_data.append([
+        '',
+        '',
+        '<b>Total</b>',
+        f"<b>₹{order.total_amount:.2f}</b>"
+    ])
+    
+    # Create table - NO QR CODE included
+    bill_table = Table(table_data, colWidths=[3*inch, 0.8*inch, 1.2*inch, 1*inch])
+    bill_table.setStyle(TableStyle([
+        # Header row
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+        ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('TOPPADDING', (0, 0), (-1, 0), 12),
+        
+        # Data rows
+        ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -2), 10),
+        ('BOTTOMPADDING', (0, 1), (-1, -2), 8),
+        ('TOPPADDING', (0, 1), (-1, -2), 8),
+        ('GRID', (0, 0), (-1, -2), 1, colors.black),
+        
+        # Total row
+        ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 11),
+        ('TOPPADDING', (0, -1), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, -1), (-1, -1), 10),
+        ('LINEABOVE', (0, -1), (-1, -1), 2, colors.black),
+        ('GRID', (0, -1), (-1, -1), 1, colors.black),
+    ]))
+    
+    elements.append(bill_table)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Status
+    status_style = styles['Normal']
+    status_style.alignment = 1
+    status_style.fontSize = 10
+    status_text = f"Status: {order.status.upper()}"
+    status_para = Paragraph(status_text, status_style)
+    elements.append(status_para)
+    
+    # NOTE: QR CODE IS INTENTIONALLY NOT INCLUDED - Same as print format
+    # Build PDF
+    doc.build(elements)
+    return response
 
 
 # Export Views
@@ -793,5 +906,777 @@ def export_profit_excel(request, start_date, end_date):
     
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="profit_{start_date}_{end_date}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def reports_graphs(request):
+    """Reports graphs page with daily and monthly sales/items graphs"""
+    today = timezone.now().date()
+    current_month = timezone.now().month
+    current_year = timezone.now().year
+    user_date_joined = request.user.date_joined
+    
+    # Get last 30 days for daily graph
+    daily_data = []
+    daily_items_data = {}
+    daily_breakdown = []  # Detailed daily breakdown
+    
+    for i in range(29, -1, -1):
+        date = today - timedelta(days=i)
+        daily_sales = calculate_daily_sales(date, user_date_joined)
+        daily_data.append({
+            'date': date.strftime('%Y-%m-%d'),
+            'sales': float(daily_sales['total_sales']),
+            'orders': daily_sales['total_orders']
+        })
+        
+        # Daily breakdown data
+        daily_breakdown.append({
+            'date': date,
+            'date_str': date.strftime('%Y-%m-%d'),
+            'sales': float(daily_sales['total_sales']),
+            'orders': daily_sales['total_orders']
+        })
+        
+        # Get items for this day
+        orders = Order.objects.filter(
+            created_at__date=date,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                if item_name not in daily_items_data:
+                    daily_items_data[item_name] = {}
+                if date.strftime('%Y-%m-%d') not in daily_items_data[item_name]:
+                    daily_items_data[item_name][date.strftime('%Y-%m-%d')] = 0
+                daily_items_data[item_name][date.strftime('%Y-%m-%d')] += item.quantity
+    
+    # Top Items - Last 7 Days
+    top_items_7days = {}
+    for i in range(6, -1, -1):
+        date = today - timedelta(days=i)
+        orders = Order.objects.filter(
+            created_at__date=date,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                if item_name not in top_items_7days:
+                    top_items_7days[item_name] = {'quantity': 0, 'revenue': Decimal('0')}
+                top_items_7days[item_name]['quantity'] += item.quantity
+                top_items_7days[item_name]['revenue'] += item.price * item.quantity
+    
+    top_items_7days_list = sorted(
+        [{'name': k, 'quantity': v['quantity'], 'revenue': float(v['revenue'])} 
+         for k, v in top_items_7days.items()],
+        key=lambda x: x['quantity'],
+        reverse=True
+    )
+    
+    # Top Items - Last 6 Months
+    top_items_6months = {}
+    for i in range(5, -1, -1):
+        target_date = today - timedelta(days=30*i)
+        year = target_date.year
+        month = target_date.month
+        orders = Order.objects.filter(
+            created_at__year=year,
+            created_at__month=month,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                if item_name not in top_items_6months:
+                    top_items_6months[item_name] = {'quantity': 0, 'revenue': Decimal('0')}
+                top_items_6months[item_name]['quantity'] += item.quantity
+                top_items_6months[item_name]['revenue'] += item.price * item.quantity
+    
+    top_items_6months_list = sorted(
+        [{'name': k, 'quantity': v['quantity'], 'revenue': float(v['revenue'])} 
+         for k, v in top_items_6months.items()],
+        key=lambda x: x['quantity'],
+        reverse=True
+    )
+    
+    # Get last 12 months for monthly graph
+    monthly_data = []
+    monthly_items_data = {}
+    monthly_breakdown = []  # Detailed monthly breakdown
+    
+    for i in range(11, -1, -1):
+        target_date = today - timedelta(days=30*i)
+        year = target_date.year
+        month = target_date.month
+        monthly_sales = calculate_monthly_sales(year, month, user_date_joined)
+        monthly_data.append({
+            'month': f"{year}-{month:02d}",
+            'sales': float(monthly_sales['total_sales']),
+            'orders': monthly_sales['total_orders']
+        })
+        
+        # Monthly breakdown data
+        monthly_breakdown.append({
+            'year': year,
+            'month': month,
+            'month_str': f"{year}-{month:02d}",
+            'sales': float(monthly_sales['total_sales']),
+            'orders': monthly_sales['total_orders']
+        })
+        
+        # Get items for this month
+        orders = Order.objects.filter(
+            created_at__year=year,
+            created_at__month=month,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                month_key = f"{year}-{month:02d}"
+                if item_name not in monthly_items_data:
+                    monthly_items_data[item_name] = {}
+                if month_key not in monthly_items_data[item_name]:
+                    monthly_items_data[item_name][month_key] = 0
+                monthly_items_data[item_name][month_key] += item.quantity
+    
+    context = {
+        'daily_data': json.dumps(daily_data),
+        'daily_items_data': json.dumps(daily_items_data),
+        'monthly_data': json.dumps(monthly_data),
+        'monthly_items_data': json.dumps(monthly_items_data),
+        'daily_breakdown': daily_breakdown,
+        'top_items_7days': top_items_7days_list,
+        'top_items_6months': top_items_6months_list,
+        'monthly_breakdown': monthly_breakdown,
+    }
+    
+    return render(request, 'admin/reports_graphs.html', context)
+
+
+@login_required
+def yearly_sales_report(request):
+    """Yearly sales report with date range"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    # Get start date from request or use user creation date
+    start_date_str = request.GET.get('start_date')
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except:
+            start_date = max(user_date_joined.date(), date(today.year, 1, 1))
+    else:
+        start_date = max(user_date_joined.date(), date(today.year, 1, 1))
+    
+    end_date = today
+    
+    yearly_sales = calculate_yearly_sales(start_date, end_date, user_date_joined)
+    
+    context = {
+        'yearly_sales': yearly_sales,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+    
+    return render(request, 'admin/yearly_sales_report.html', context)
+
+
+@login_required
+def export_yearly_pdf(request):
+    """Export yearly sales report as PDF"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    start_date_str = request.GET.get('start_date')
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except:
+            start_date = max(user_date_joined.date(), date(today.year, 1, 1))
+    else:
+        start_date = max(user_date_joined.date(), date(today.year, 1, 1))
+    
+    end_date = today
+    yearly_sales = calculate_yearly_sales(start_date, end_date, user_date_joined)
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="yearly_sales_{start_date}_{end_date}.pdf"'
+    
+    doc = SimpleDocTemplate(response, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    title = Paragraph(f"Yearly Sales Report - {start_date} to {end_date}", styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Summary
+    data = [
+        ['Period', f"{start_date} to {end_date}"],
+        ['Total Sales', f"₹{yearly_sales['total_sales']:.2f}"],
+        ['Total Orders', str(yearly_sales['total_orders'])],
+    ]
+    
+    table = Table(data, colWidths=[2*inch, 4*inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.grey),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (1, 0), (1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 0.5*inch))
+    
+    # Item breakdown
+    if yearly_sales['item_breakdown']:
+        elements.append(Paragraph("Item-wise Sales", styles['Heading2']))
+        item_data = [['Item Name', 'Quantity', 'Revenue (₹)']]
+        for item in yearly_sales['item_breakdown']:
+            item_data.append([
+                item['name'],
+                str(item['total_quantity']),
+                f"₹{item['total_revenue']:.2f}"
+            ])
+        
+        item_table = Table(item_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+        item_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        elements.append(item_table)
+    
+    doc.build(elements)
+    return response
+
+
+@login_required
+def export_yearly_excel(request):
+    """Export yearly sales report as Excel"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    start_date_str = request.GET.get('start_date')
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except:
+            start_date = max(user_date_joined.date(), date(today.year, 1, 1))
+    else:
+        start_date = max(user_date_joined.date(), date(today.year, 1, 1))
+    
+    end_date = today
+    yearly_sales = calculate_yearly_sales(start_date, end_date, user_date_joined)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Yearly Sales"
+    
+    # Header
+    ws['A1'] = f"Yearly Sales Report - {start_date} to {end_date}"
+    ws['A1'].font = Font(size=16, bold=True)
+    ws.merge_cells('A1:C1')
+    
+    # Summary
+    ws['A3'] = 'Period'
+    ws['B3'] = f"{start_date} to {end_date}"
+    ws['A4'] = 'Total Sales'
+    ws['B4'] = f"₹{yearly_sales['total_sales']:.2f}"
+    ws['A5'] = 'Total Orders'
+    ws['B5'] = yearly_sales['total_orders']
+    
+    # Item breakdown
+    if yearly_sales['item_breakdown']:
+        ws['A7'] = 'Item Name'
+        ws['B7'] = 'Quantity'
+        ws['C7'] = 'Revenue (₹)'
+        
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        for col in ['A7', 'B7', 'C7']:
+            ws[col].fill = header_fill
+            ws[col].font = header_font
+        
+        for i, item in enumerate(yearly_sales['item_breakdown'], start=8):
+            ws[f'A{i}'] = item['name']
+            ws[f'B{i}'] = item['total_quantity']
+            ws[f'C{i}'] = f"₹{item['total_revenue']:.2f}"
+    
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="yearly_sales_{start_date}_{end_date}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_daily_breakdown_pdf(request):
+    """Export daily breakdown as PDF"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    daily_breakdown = []
+    for i in range(29, -1, -1):
+        date = today - timedelta(days=i)
+        daily_sales = calculate_daily_sales(date, user_date_joined)
+        daily_breakdown.append({
+            'date': date,
+            'sales': float(daily_sales['total_sales']),
+            'orders': daily_sales['total_orders']
+        })
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="daily_breakdown_{today}.pdf"'
+    
+    doc = SimpleDocTemplate(response, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title = Paragraph("Daily Breakdown - Last 30 Days", styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    data = [['Date', 'Sales (₹)', 'Orders']]
+    for item in daily_breakdown:
+        data.append([
+            item['date'].strftime('%Y-%m-%d'),
+            f"₹{item['sales']:.2f}",
+            str(item['orders'])
+        ])
+    
+    table = Table(data, colWidths=[2*inch, 2*inch, 2*inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    elements.append(table)
+    
+    doc.build(elements)
+    return response
+
+
+@login_required
+def export_daily_breakdown_excel(request):
+    """Export daily breakdown as Excel"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    daily_breakdown = []
+    for i in range(29, -1, -1):
+        date = today - timedelta(days=i)
+        daily_sales = calculate_daily_sales(date, user_date_joined)
+        daily_breakdown.append({
+            'date': date,
+            'sales': float(daily_sales['total_sales']),
+            'orders': daily_sales['total_orders']
+        })
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Daily Breakdown"
+    
+    ws['A1'] = "Daily Breakdown - Last 30 Days"
+    ws['A1'].font = Font(size=16, bold=True)
+    ws.merge_cells('A1:C1')
+    
+    ws['A3'] = 'Date'
+    ws['B3'] = 'Sales (₹)'
+    ws['C3'] = 'Orders'
+    
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for col in ['A3', 'B3', 'C3']:
+        ws[col].fill = header_fill
+        ws[col].font = header_font
+    
+    for i, item in enumerate(daily_breakdown, start=4):
+        ws[f'A{i}'] = item['date'].strftime('%Y-%m-%d')
+        ws[f'B{i}'] = f"₹{item['sales']:.2f}"
+        ws[f'C{i}'] = item['orders']
+    
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="daily_breakdown_{today}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_top_items_7days_pdf(request):
+    """Export top items last 7 days as PDF"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    top_items = {}
+    for i in range(6, -1, -1):
+        date = today - timedelta(days=i)
+        orders = Order.objects.filter(
+            created_at__date=date,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                if item_name not in top_items:
+                    top_items[item_name] = {'quantity': 0, 'revenue': Decimal('0')}
+                top_items[item_name]['quantity'] += item.quantity
+                top_items[item_name]['revenue'] += item.price * item.quantity
+    
+    top_items_list = sorted(
+        [{'name': k, 'quantity': v['quantity'], 'revenue': float(v['revenue'])} 
+         for k, v in top_items.items()],
+        key=lambda x: x['quantity'],
+        reverse=True
+    )
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="top_items_7days_{today}.pdf"'
+    
+    doc = SimpleDocTemplate(response, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title = Paragraph("Top Items Breakdown - Last 7 Days", styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    data = [['Item Name', 'Quantity', 'Revenue (₹)']]
+    for item in top_items_list:
+        data.append([
+            item['name'],
+            str(item['quantity']),
+            f"₹{item['revenue']:.2f}"
+        ])
+    
+    table = Table(data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    elements.append(table)
+    
+    doc.build(elements)
+    return response
+
+
+@login_required
+def export_top_items_7days_excel(request):
+    """Export top items last 7 days as Excel"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    top_items = {}
+    for i in range(6, -1, -1):
+        date = today - timedelta(days=i)
+        orders = Order.objects.filter(
+            created_at__date=date,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                if item_name not in top_items:
+                    top_items[item_name] = {'quantity': 0, 'revenue': Decimal('0')}
+                top_items[item_name]['quantity'] += item.quantity
+                top_items[item_name]['revenue'] += item.price * item.quantity
+    
+    top_items_list = sorted(
+        [{'name': k, 'quantity': v['quantity'], 'revenue': float(v['revenue'])} 
+         for k, v in top_items.items()],
+        key=lambda x: x['quantity'],
+        reverse=True
+    )
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Top Items 7 Days"
+    
+    ws['A1'] = "Top Items Breakdown - Last 7 Days"
+    ws['A1'].font = Font(size=16, bold=True)
+    ws.merge_cells('A1:C1')
+    
+    ws['A3'] = 'Item Name'
+    ws['B3'] = 'Quantity'
+    ws['C3'] = 'Revenue (₹)'
+    
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for col in ['A3', 'B3', 'C3']:
+        ws[col].fill = header_fill
+        ws[col].font = header_font
+    
+    for i, item in enumerate(top_items_list, start=4):
+        ws[f'A{i}'] = item['name']
+        ws[f'B{i}'] = item['quantity']
+        ws[f'C{i}'] = f"₹{item['revenue']:.2f}"
+    
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="top_items_7days_{today}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_top_items_6months_pdf(request):
+    """Export top items last 6 months as PDF"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    top_items = {}
+    for i in range(5, -1, -1):
+        target_date = today - timedelta(days=30*i)
+        year = target_date.year
+        month = target_date.month
+        orders = Order.objects.filter(
+            created_at__year=year,
+            created_at__month=month,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                if item_name not in top_items:
+                    top_items[item_name] = {'quantity': 0, 'revenue': Decimal('0')}
+                top_items[item_name]['quantity'] += item.quantity
+                top_items[item_name]['revenue'] += item.price * item.quantity
+    
+    top_items_list = sorted(
+        [{'name': k, 'quantity': v['quantity'], 'revenue': float(v['revenue'])} 
+         for k, v in top_items.items()],
+        key=lambda x: x['quantity'],
+        reverse=True
+    )
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="top_items_6months_{today}.pdf"'
+    
+    doc = SimpleDocTemplate(response, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title = Paragraph("Top Items Breakdown - Last 6 Months", styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    data = [['Item Name', 'Quantity', 'Revenue (₹)']]
+    for item in top_items_list:
+        data.append([
+            item['name'],
+            str(item['quantity']),
+            f"₹{item['revenue']:.2f}"
+        ])
+    
+    table = Table(data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    elements.append(table)
+    
+    doc.build(elements)
+    return response
+
+
+@login_required
+def export_top_items_6months_excel(request):
+    """Export top items last 6 months as Excel"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    top_items = {}
+    for i in range(5, -1, -1):
+        target_date = today - timedelta(days=30*i)
+        year = target_date.year
+        month = target_date.month
+        orders = Order.objects.filter(
+            created_at__year=year,
+            created_at__month=month,
+            status='paid',
+            created_at__gte=user_date_joined
+        )
+        for order in orders:
+            for item in order.order_items.all():
+                item_name = item.menu_item.name
+                if item_name not in top_items:
+                    top_items[item_name] = {'quantity': 0, 'revenue': Decimal('0')}
+                top_items[item_name]['quantity'] += item.quantity
+                top_items[item_name]['revenue'] += item.price * item.quantity
+    
+    top_items_list = sorted(
+        [{'name': k, 'quantity': v['quantity'], 'revenue': float(v['revenue'])} 
+         for k, v in top_items.items()],
+        key=lambda x: x['quantity'],
+        reverse=True
+    )
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Top Items 6 Months"
+    
+    ws['A1'] = "Top Items Breakdown - Last 6 Months"
+    ws['A1'].font = Font(size=16, bold=True)
+    ws.merge_cells('A1:C1')
+    
+    ws['A3'] = 'Item Name'
+    ws['B3'] = 'Quantity'
+    ws['C3'] = 'Revenue (₹)'
+    
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for col in ['A3', 'B3', 'C3']:
+        ws[col].fill = header_fill
+        ws[col].font = header_font
+    
+    for i, item in enumerate(top_items_list, start=4):
+        ws[f'A{i}'] = item['name']
+        ws[f'B{i}'] = item['quantity']
+        ws[f'C{i}'] = f"₹{item['revenue']:.2f}"
+    
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="top_items_6months_{today}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_monthly_breakdown_pdf(request):
+    """Export monthly breakdown as PDF"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    monthly_breakdown = []
+    for i in range(11, -1, -1):
+        target_date = today - timedelta(days=30*i)
+        year = target_date.year
+        month = target_date.month
+        monthly_sales = calculate_monthly_sales(year, month, user_date_joined)
+        monthly_breakdown.append({
+            'year': year,
+            'month': month,
+            'month_str': f"{year}-{month:02d}",
+            'sales': float(monthly_sales['total_sales']),
+            'orders': monthly_sales['total_orders']
+        })
+    
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="monthly_breakdown_{today}.pdf"'
+    
+    doc = SimpleDocTemplate(response, pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title = Paragraph("Monthly Breakdown - Last 12 Months", styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    data = [['Month', 'Sales (₹)', 'Orders']]
+    for item in monthly_breakdown:
+        data.append([
+            item['month_str'],
+            f"₹{item['sales']:.2f}",
+            str(item['orders'])
+        ])
+    
+    table = Table(data, colWidths=[2*inch, 2*inch, 2*inch])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ]))
+    elements.append(table)
+    
+    doc.build(elements)
+    return response
+
+
+@login_required
+def export_monthly_breakdown_excel(request):
+    """Export monthly breakdown as Excel"""
+    today = timezone.now().date()
+    user_date_joined = request.user.date_joined
+    
+    monthly_breakdown = []
+    for i in range(11, -1, -1):
+        target_date = today - timedelta(days=30*i)
+        year = target_date.year
+        month = target_date.month
+        monthly_sales = calculate_monthly_sales(year, month, user_date_joined)
+        monthly_breakdown.append({
+            'year': year,
+            'month': month,
+            'month_str': f"{year}-{month:02d}",
+            'sales': float(monthly_sales['total_sales']),
+            'orders': monthly_sales['total_orders']
+        })
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Monthly Breakdown"
+    
+    ws['A1'] = "Monthly Breakdown - Last 12 Months"
+    ws['A1'].font = Font(size=16, bold=True)
+    ws.merge_cells('A1:C1')
+    
+    ws['A3'] = 'Month'
+    ws['B3'] = 'Sales (₹)'
+    ws['C3'] = 'Orders'
+    
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for col in ['A3', 'B3', 'C3']:
+        ws[col].fill = header_fill
+        ws[col].font = header_font
+    
+    for i, item in enumerate(monthly_breakdown, start=4):
+        ws[f'A{i}'] = item['month_str']
+        ws[f'B{i}'] = f"₹{item['sales']:.2f}"
+        ws[f'C{i}'] = item['orders']
+    
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="monthly_breakdown_{today}.xlsx"'
     wb.save(response)
     return response
