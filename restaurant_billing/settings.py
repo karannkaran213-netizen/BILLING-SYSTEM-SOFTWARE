@@ -78,7 +78,7 @@ DATABASES = {
         'NAME': os.getenv('restaurant_billing'),
         'USER': os.getenv('root'),
         'PASSWORD': os.getenv('123456'),
-        'HOST': os.getenv('.vercel.app'),
+        'HOST': os.getenv('https://billing-system-orpin-alpha.vercel.app/'),
         'PORT': os.getenv('3306'),
     }
 }
